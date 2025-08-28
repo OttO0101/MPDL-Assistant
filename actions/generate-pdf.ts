@@ -39,6 +39,43 @@ export async function generateCleaningInventoryPdf(): Promise<{
       return { success: false, error: "No hay inventarios para generar el PDF." }
     }
 
+    // Calculate LAC consolidated inventory
+    const lacSubUnits = ["LAC1", "LAC2", "LAC3", "LAC4", "LAC5", "LAC6"]
+    const lacInventories = inventories.filter((inv) => lacSubUnits.includes(inv.device))
+    let lacConsolidatedInventory: CleaningInventory | null = null
+
+    if (lacInventories.length > 0) {
+      const consolidatedProducts: Record<string, number> = {}
+
+      // Sum quantities for each product across LAC sub-units
+      lacInventories.forEach((inventory) => {
+        if (Array.isArray(inventory.products)) {
+          inventory.products.forEach((prodQty) => {
+            if (prodQty.productId !== CLEANING_PRODUCTS_LIST.find((p) => p.name === "Otros")?.id) {
+              const quantity = Number.parseInt(prodQty.quantity, 10)
+              if (!isNaN(quantity)) {
+                consolidatedProducts[prodQty.productId] = (consolidatedProducts[prodQty.productId] || 0) + quantity
+              }
+            }
+          })
+        }
+      })
+
+      // Create consolidated inventory object
+      const consolidatedProductsArray: ProductQuantity[] = Object.entries(consolidatedProducts)
+        .filter(([_, quantity]) => quantity > 0)
+        .map(([productId, quantity]) => ({ productId, quantity: quantity.toString() }))
+
+      if (consolidatedProductsArray.length > 0) {
+        lacConsolidatedInventory = {
+          device: "LAC (Consolidado)",
+          products: consolidatedProductsArray,
+          reported_by: "Sistema MPDL",
+          date: new Date().toISOString().split("T")[0],
+        }
+      }
+    }
+
     const pdfDoc = await PDFDocument.create()
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
@@ -186,6 +223,83 @@ export async function generateCleaningInventoryPdf(): Promise<{
         }
         yPosition -= sectionSpacing // Space between device sections
       }
+    }
+
+    // Add LAC consolidated inventory to PDF if it exists
+    if (lacConsolidatedInventory) {
+      // Check if new page is needed
+      if (yPosition < margin + 100) {
+        currentPage = pdfDoc.addPage()
+        yPosition = currentPage.getHeight() - 50
+        addHeader()
+      }
+
+      currentPage.drawText(`Dispositivo: ${lacConsolidatedInventory.device}`, {
+        x: margin,
+        y: yPosition,
+        font: boldFont,
+        size: 12,
+        color: rgb(0, 0, 0),
+      })
+      yPosition -= lineHeight
+
+      currentPage.drawText(`Cantidades consolidadas de LAC1 a LAC6 - ${lacConsolidatedInventory.date}`, {
+        x: margin,
+        y: yPosition,
+        font: font,
+        size: 10,
+        color: rgb(0.3, 0.3, 0.3),
+      })
+      yPosition -= lineHeight * 1.5
+
+      if (lacConsolidatedInventory.products && lacConsolidatedInventory.products.length > 0) {
+        currentPage.drawText("Productos:", {
+          x: margin + 10,
+          y: yPosition,
+          font: boldFont,
+          size: 10,
+          color: rgb(0, 0, 0),
+        })
+        yPosition -= lineHeight
+
+        for (const product of lacConsolidatedInventory.products) {
+          const productName = CLEANING_PRODUCTS_LIST.find((p) => p.id === product.productId)?.name || product.productId
+          const productText = `- ${productName}: ${product.quantity}`
+
+          if (yPosition < margin + lineHeight) {
+            currentPage = pdfDoc.addPage()
+            yPosition = currentPage.getHeight() - 50
+            addHeader()
+            currentPage.drawText(`Productos (cont. para ${lacConsolidatedInventory.device}):`, {
+              x: margin + 10,
+              y: yPosition,
+              font: boldFont,
+              size: 10,
+              color: rgb(0, 0, 0),
+            })
+            yPosition -= lineHeight
+          }
+
+          currentPage.drawText(productText, {
+            x: margin + 20,
+            y: yPosition,
+            font: font,
+            size: 10,
+            color: rgb(0, 0, 0),
+          })
+          yPosition -= lineHeight
+        }
+      } else {
+        currentPage.drawText("No se registraron productos consolidados para LAC.", {
+          x: margin + 10,
+          y: yPosition,
+          font: font,
+          size: 10,
+          color: rgb(0.5, 0.5, 0.5),
+        })
+        yPosition -= lineHeight
+      }
+      yPosition -= sectionSpacing
     }
 
     const pdfBytes = await pdfDoc.save()
