@@ -3,21 +3,26 @@
 import { put } from "@vercel/blob"
 import { generateCleaningInventoryPdf } from "./generate-pdf"
 
-export async function archivePdf() {
+export async function archivePdf(filename: string): Promise<{ success: boolean; error?: string }> {
   try {
     console.log("🗂️ Iniciando proceso de archivado de PDF...")
 
     // Generar el PDF
-    const pdfBuffer = await generateCleaningInventoryPdf()
+    const result = await generateCleaningInventoryPdf()
 
-    // Generar nombre de archivo con fecha
-    const filename = await generateArchiveFilename()
-    console.log(`📁 Nombre de archivo generado: ${filename}`)
+    if (!result.success || !result.pdfBase64) {
+      throw new Error(result.error || "Error al generar PDF")
+    }
+
+    // Convertir base64 a buffer
+    const pdfBuffer = Buffer.from(result.pdfBase64, "base64")
+
+    console.log(`📁 Nombre de archivo: ${filename}`)
 
     // Subir a Vercel Blob con configuración para evitar conflictos
     const blob = await put(filename, pdfBuffer, {
       access: "public",
-      addRandomSuffix: true, // Esto evita conflictos de nombres
+      addRandomSuffix: true,
     })
 
     console.log(`✅ PDF archivado exitosamente en: ${blob.url}`)
@@ -25,9 +30,6 @@ export async function archivePdf() {
 
     return {
       success: true,
-      url: blob.url,
-      filename: blob.pathname, // Usar el pathname real del blob
-      size: pdfBuffer.length,
     }
   } catch (error) {
     console.error("❌ Error durante el proceso de archivado:", error)
