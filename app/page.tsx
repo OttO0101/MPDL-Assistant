@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { FileText, Trash2 } from "lucide-react"
+import { FileText, Trash2, Settings } from "lucide-react"
 import { AppLogo } from "@/components/core/AppLogo"
 import ProductosLimpieza from "@/components/cleaning/ProductosLimpieza"
 import { useRouter } from "next/navigation"
@@ -56,10 +56,12 @@ export default function HomePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <AppLogo size="large" className="mx-auto mb-4" />
-          <p className="text-gray-600">Cargando...</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center floating-particles">
+        <div className="text-center fade-in-up">
+          <div className="glow-effect rounded-2xl p-4 mb-4">
+            <AppLogo size="large" className="mx-auto" />
+          </div>
+          <p className="text-gray-600 text-lg">Cargando...</p>
         </div>
       </div>
     )
@@ -70,88 +72,112 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header con logo MPDL */}
-        <div className="flex items-center justify-between mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 floating-particles">
+      <div className="max-w-4xl mx-auto p-6">
+        {/* Header con logo MPDL y efectos modernos */}
+        <div className="flex items-center justify-between mb-12 fade-in-up">
           <div className="flex items-center">
-            <AppLogo size="large" className="mr-4" />
+            <div className="glow-effect rounded-2xl p-2 mr-6">
+              <AppLogo size="large" />
+            </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Sistema de Inventarios MPDL</h1>
-              <p className="text-gray-600">Gestión de Productos de Limpieza - Movimiento por la Paz</p>
+              <h1 className="text-4xl font-bold text-gradient mb-2">Sistema de Inventarios MPDL</h1>
+              <p className="text-lg text-slate-600">Gestión de Productos de Limpieza - Movimiento por la Paz</p>
             </div>
           </div>
         </div>
 
         {/* Alertas de estado */}
         {clearStatus && (
-          <Alert variant={clearStatus.type === "error" ? "destructive" : "default"} className="mb-6">
-            <AlertDescription>{clearStatus.message}</AlertDescription>
+          <Alert
+            variant={clearStatus.type === "error" ? "destructive" : "default"}
+            className="mb-8 fade-in-up stagger-1"
+          >
+            <AlertDescription className="text-base">{clearStatus.message}</AlertDescription>
           </Alert>
         )}
 
-        {/* Tarjetas de funcionalidades */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+        {/* Tarjetas de funcionalidades con efectos modernos */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
+          <Card className="dynamic-card cursor-pointer fade-in-up stagger-1">
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <FileText className="h-5 w-5 mr-2" />
+              <CardTitle className="flex items-center text-xl">
+                <FileText className="h-6 w-6 mr-3 metallic-icon" />
                 Productos de Limpieza
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600 mb-4">
+              <p className="text-slate-600 mb-6 text-base leading-relaxed">
                 Registra y gestiona el inventario de productos de limpieza por dispositivo.
               </p>
               <Button
                 onClick={() => setCurrentView("productos-limpieza")}
-                className="w-full bg-mpdl-blue text-white hover:bg-mpdl-blue-dark"
+                className="modern-button w-full text-white font-medium py-3"
               >
                 Acceder
               </Button>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className="dynamic-card fade-in-up stagger-2">
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <FileText className="h-5 w-5 mr-2" />
+              <CardTitle className="flex items-center text-xl">
+                <FileText className="h-6 w-6 mr-3 metallic-icon" />
                 Resumen de Productos
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600 mb-4">Visualiza y descarga el resumen completo de inventarios en PDF.</p>
-              <Button onClick={() => router.push("/summary")} variant="outline" className="w-full">
+              <p className="text-slate-600 mb-6 text-base leading-relaxed">
+                Visualiza y descarga el resumen completo de inventarios en PDF.
+              </p>
+              <Button
+                onClick={() => router.push("/summary")}
+                variant="outline"
+                className="w-full py-3 border-2 border-corporate-primary text-corporate-primary hover:bg-corporate-primary hover:text-white transition-all duration-300"
+              >
                 Ver Resumen
               </Button>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className="dynamic-card fade-in-up stagger-3">
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <Trash2 className="h-5 w-5 mr-2" />
+              <CardTitle className="flex items-center text-xl">
+                <Trash2 className="h-6 w-6 mr-3 metallic-icon" />
                 Limpiar Registros
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600 mb-4">Elimina todos los registros de inventario para empezar de nuevo.</p>
-              <Button onClick={handleClearInventories} disabled={isClearing} variant="destructive" className="w-full">
+              <p className="text-slate-600 mb-6 text-base leading-relaxed">
+                Elimina todos los registros de inventario para empezar de nuevo.
+              </p>
+              <Button
+                onClick={handleClearInventories}
+                disabled={isClearing}
+                variant="destructive"
+                className="w-full py-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 transition-all duration-300"
+              >
                 {isClearing ? "Limpiando..." : "Limpiar Todo"}
               </Button>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className="dynamic-card fade-in-up stagger-4">
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <FileText className="h-5 w-5 mr-2" />
+              <CardTitle className="flex items-center text-xl">
+                <Settings className="h-6 w-6 mr-3 metallic-icon" />
                 Probar Sistema
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600 mb-4">Verificar el funcionamiento del registro y generación de PDFs.</p>
-              <Button onClick={() => router.push("/test")} variant="outline" className="w-full">
+              <p className="text-slate-600 mb-6 text-base leading-relaxed">
+                Verificar el funcionamiento del registro y generación de PDFs.
+              </p>
+              <Button
+                onClick={() => router.push("/test")}
+                variant="outline"
+                className="w-full py-3 border-2 border-corporate-primary text-corporate-primary hover:bg-corporate-primary hover:text-white transition-all duration-300"
+              >
                 Ejecutar Pruebas
               </Button>
             </CardContent>

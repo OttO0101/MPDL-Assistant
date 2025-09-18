@@ -3,28 +3,64 @@
 import { put } from "@vercel/blob"
 import { generateCleaningInventoryPdf } from "./generate-pdf"
 
-export async function archivePdf(filename: string): Promise<{ success: boolean; url?: string; error?: string }> {
+export async function archivePdf() {
   try {
-    // Generate the PDF first
-    const pdfResult = await generateCleaningInventoryPdf()
+    console.log("🗂️ Iniciando proceso de archivado de PDF...")
 
-    if (!pdfResult.success || !pdfResult.pdfBase64) {
-      return { success: false, error: pdfResult.error || "Error al generar PDF" }
-    }
+    // Generar el PDF
+    const pdfBuffer = await generateCleaningInventoryPdf()
 
-    // Convert base64 to Buffer and then to Blob
-    const pdfBuffer = Buffer.from(pdfResult.pdfBase64, "base64")
-    const pdfBlob = new Blob([pdfBuffer], { type: "application/pdf" })
+    // Generar nombre de archivo con fecha
+    const filename = await generateArchiveFilename()
+    console.log(`📁 Nombre de archivo generado: ${filename}`)
 
-    // Upload to Vercel Blob
-    const blob = await put(filename, pdfBlob, {
+    // Subir a Vercel Blob con configuración para evitar conflictos
+    const blob = await put(filename, pdfBuffer, {
       access: "public",
-      addRandomSuffix: true, // This will add a random suffix to avoid conflicts
+      addRandomSuffix: true, // Esto evita conflictos de nombres
     })
 
-    return { success: true, url: blob.url }
-  } catch (error: any) {
-    console.error("Error archiving PDF to Vercel Blob:", error)
-    return { success: false, error: `Error al archivar PDF: ${error.message}` }
+    console.log(`✅ PDF archivado exitosamente en: ${blob.url}`)
+    console.log(`📊 Tamaño del archivo: ${pdfBuffer.length} bytes`)
+
+    return {
+      success: true,
+      url: blob.url,
+      filename: blob.pathname, // Usar el pathname real del blob
+      size: pdfBuffer.length,
+    }
+  } catch (error) {
+    console.error("❌ Error durante el proceso de archivado:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Error desconocido durante el archivado",
+    }
   }
+}
+
+export async function generateArchiveFilename(): Promise<string> {
+  const now = new Date()
+  const day = now.getDate().toString().padStart(2, "0")
+  const month = (now.getMonth() + 1).toString().padStart(2, "0")
+  const year = now.getFullYear()
+
+  return `archived-inventories/Productos_${day}-${month}-${year}.pdf`
+}
+
+// Función utilitaria para mostrar nombres de archivo amigables
+export async function getDisplayFilename(filename: string): Promise<string> {
+  // Extraer la fecha del nombre del archivo
+  const match = filename.match(/Productos_(\d{2})-(\d{2})-(\d{4})/)
+  if (match) {
+    const [, day, month, year] = match
+    return `Productos ${day}/${month}/${year}`
+  }
+  return filename
+}
+
+// Función para listar archivos archivados (preparada para futuro uso)
+export async function getArchivedFiles(): Promise<any[]> {
+  // Esta función se puede implementar cuando se necesite listar archivos archivados
+  // Por ahora retorna un array vacío
+  return []
 }
