@@ -1,23 +1,10 @@
 "use server"
 
-import { supabase } from "@/lib/supabase"
-import { CLEANING_PRODUCTS_LIST, LAC_SUB_UNITS_FOR_SUM, LAC_CONSOLIDATED_INVENTORY_DEVICE } from "@/lib/constants"
+import { createClient } from "@supabase/supabase-js"
 
-interface CleaningInventory {
-  id: number
-  device: string
-  products: Array<{ productId: string; quantity: string }>
-  reported_by: string
-  date: string
-  created_at: string
-  updated_at: string
-}
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
-export async function generateCleaningInventoryPdf(): Promise<{
-  success: boolean
-  pdfBase64?: string
-  error?: string
-}> {
+export async function generateCleaningInventoryPdf(): Promise<Buffer> {
   try {
     console.log("🔄 Iniciando generación de PDF...")
 
@@ -26,20 +13,17 @@ export async function generateCleaningInventoryPdf(): Promise<{
       .from("cleaning_inventories")
       .select("*")
       .order("device", { ascending: true })
-      .order("created_at", { ascending: false })
+      .order("updated_at", { ascending: false })
 
     if (error) {
       console.error("❌ Error al obtener inventarios:", error)
-      return {
-        success: false,
-        error: `Error al obtener datos: ${error.message}`,
-      }
+      throw new Error(`Error al obtener datos: ${error.message}`)
     }
 
     console.log(`📊 Inventarios obtenidos: ${inventories?.length || 0}`)
 
     // Agrupar inventarios por dispositivo (tomar el más reciente de cada dispositivo)
-    const latestInventories = new Map<string, CleaningInventory>()
+    const latestInventories = new Map()
     inventories?.forEach((inventory) => {
       const deviceName = inventory.device
       if (!latestInventories.has(deviceName)) {
@@ -55,27 +39,21 @@ export async function generateCleaningInventoryPdf(): Promise<{
     // Generar HTML para el PDF
     const htmlContent = generatePdfHtml(Array.from(latestInventories.values()), lacConsolidated)
 
-    // Convertir HTML a base64 (simulando PDF)
-    const pdfBase64 = Buffer.from(htmlContent, "utf-8").toString("base64")
+    // Simular generación de PDF (en un entorno real usarías puppeteer o similar)
+    const pdfBuffer = Buffer.from(htmlContent, "utf-8")
 
     console.log("✅ PDF generado exitosamente")
-    return {
-      success: true,
-      pdfBase64,
-    }
+    return pdfBuffer
   } catch (error) {
     console.error("❌ Error en generateCleaningInventoryPdf:", error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Error desconocido",
-    }
+    throw error
   }
 }
 
-function calculateLacConsolidated(inventories: CleaningInventory[]) {
+function calculateLacConsolidated(inventories: any[]) {
   console.log("🧮 Calculando LAC Consolidado...")
 
-  const lacDevices = inventories.filter((inv) => inv.device && LAC_SUB_UNITS_FOR_SUM.includes(inv.device))
+  const lacDevices = inventories.filter((inv) => inv.device && inv.device.match(/^LAC[1-6]$/i))
 
   console.log(`📱 Dispositivos LAC encontrados: ${lacDevices.length}`)
 
@@ -84,22 +62,17 @@ function calculateLacConsolidated(inventories: CleaningInventory[]) {
   }
 
   const consolidated: any = {
-    device: LAC_CONSOLIDATED_INVENTORY_DEVICE,
+    device: "LAC (Consolidado)",
     products: {},
     updated_at: new Date().toISOString(),
   }
 
   // Sumar las cantidades de todos los dispositivos LAC
   lacDevices.forEach((device) => {
-    if (device.products && Array.isArray(device.products)) {
-      device.products.forEach((product) => {
-        if (product.productId && product.quantity) {
-          const quantity = Number.parseInt(product.quantity, 10)
-          if (!isNaN(quantity) && quantity > 0) {
-            const productName =
-              CLEANING_PRODUCTS_LIST.find((p) => p.id === product.productId)?.name || product.productId
-            consolidated.products[productName] = (consolidated.products[productName] || 0) + quantity
-          }
+    if (device.products && typeof device.products === "object") {
+      Object.entries(device.products).forEach(([productName, quantity]) => {
+        if (typeof quantity === "number" && quantity > 0) {
+          consolidated.products[productName] = (consolidated.products[productName] || 0) + quantity
         }
       })
     }
@@ -109,7 +82,7 @@ function calculateLacConsolidated(inventories: CleaningInventory[]) {
   return consolidated
 }
 
-function generatePdfHtml(inventories: CleaningInventory[], lacConsolidated: any): string {
+function generatePdfHtml(inventories: any[], lacConsolidated: any): string {
   const currentDate = new Date().toLocaleDateString("es-ES", {
     year: "numeric",
     month: "long",
@@ -169,7 +142,6 @@ function generatePdfHtml(inventories: CleaningInventory[], lacConsolidated: any)
           overflow: hidden;
           box-shadow: 0 8px 25px rgba(0,0,0,0.1);
           border: 1px solid rgba(0, 163, 224, 0.1);
-          page-break-inside: avoid;
         }
         .device-header {
           background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
@@ -249,10 +221,6 @@ function generatePdfHtml(inventories: CleaningInventory[], lacConsolidated: any)
           border-radius: 10px;
           box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-        @media print {
-          body { background: white; }
-          .device-section { page-break-inside: avoid; }
-        }
       </style>
     </head>
     <body>
@@ -268,8 +236,8 @@ function generatePdfHtml(inventories: CleaningInventory[], lacConsolidated: any)
 
   // Agregar inventarios regulares
   inventories.forEach((inventory) => {
-    const deviceDate = inventory.created_at
-      ? new Date(inventory.created_at).toLocaleDateString("es-ES", {
+    const deviceDate = inventory.updated_at
+      ? new Date(inventory.updated_at).toLocaleDateString("es-ES", {
           year: "numeric",
           month: "short",
           day: "numeric",
@@ -286,19 +254,18 @@ function generatePdfHtml(inventories: CleaningInventory[], lacConsolidated: any)
         </div>
     `
 
-    if (inventory.products && Array.isArray(inventory.products)) {
-      const products = inventory.products.filter(
-        (product) => product.quantity && Number.parseInt(product.quantity, 10) > 0,
+    if (inventory.products && typeof inventory.products === "object") {
+      const products = Object.entries(inventory.products).filter(
+        ([_, quantity]) => typeof quantity === "number" && quantity > 0,
       )
 
       if (products.length > 0) {
         html += '<div class="products-grid">'
-        products.forEach((product) => {
-          const productName = CLEANING_PRODUCTS_LIST.find((p) => p.id === product.productId)?.name || product.productId
+        products.forEach(([productName, quantity]) => {
           html += `
             <div class="product-item">
               <span class="product-name">🧽 ${productName}</span>
-              <span class="product-quantity">${product.quantity}</span>
+              <span class="product-quantity">${quantity}</span>
             </div>
           `
         })
@@ -318,7 +285,7 @@ function generatePdfHtml(inventories: CleaningInventory[], lacConsolidated: any)
     html += `
       <div class="device-section consolidated-section">
         <div class="device-header consolidated-header">
-          <h2 class="device-name">🏢 LAC (Consolidado)</h2>
+          <h2 class="device-name">🏢 ${lacConsolidated.device}</h2>
           <p class="device-date">Consolidado generado: ${new Date(lacConsolidated.updated_at).toLocaleDateString(
             "es-ES",
             {
