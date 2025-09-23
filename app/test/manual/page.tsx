@@ -40,15 +40,28 @@ export default function ManualTestPage() {
   const downloadPdf = () => {
     if (!pdfData) return
 
-    const blob = new Blob([Buffer.from(pdfData, "base64")], { type: "application/pdf" })
+    // Crear un HTML temporal para mostrar el contenido
+    const htmlContent = Buffer.from(pdfData, "base64").toString("utf-8")
+    const blob = new Blob([htmlContent], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = "test-inventory-report-mpdl.pdf"
+    a.download = "test-inventory-report-mpdl.html"
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+  }
+
+  const viewPdf = () => {
+    if (!pdfData) return
+
+    const htmlContent = Buffer.from(pdfData, "base64").toString("utf-8")
+    const newWindow = window.open()
+    if (newWindow) {
+      newWindow.document.write(htmlContent)
+      newWindow.document.close()
+    }
   }
 
   return (
@@ -69,22 +82,28 @@ export default function ManualTestPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Generar PDF de Prueba</CardTitle>
+                <CardTitle>Generar Reporte de Prueba</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-gray-600 mb-4">
-                  Genera un PDF con todos los inventarios actuales para verificar el formato y el logo de MPDL.
+                  Genera un reporte HTML con todos los inventarios actuales para verificar el formato y el logo de MPDL.
                 </p>
                 <div className="space-y-3">
                   <Button onClick={generateTestPdf} disabled={isGeneratingPdf} className="w-full">
-                    {isGeneratingPdf ? "Generando..." : "Generar PDF"}
+                    {isGeneratingPdf ? "Generando..." : "Generar Reporte"}
                   </Button>
 
                   {pdfData && (
-                    <Button onClick={downloadPdf} variant="outline" className="w-full bg-transparent">
-                      <Download className="h-4 w-4 mr-2" />
-                      Descargar PDF
-                    </Button>
+                    <>
+                      <Button onClick={viewPdf} variant="outline" className="w-full bg-transparent">
+                        <Download className="h-4 w-4 mr-2" />
+                        Ver Reporte
+                      </Button>
+                      <Button onClick={downloadPdf} variant="outline" className="w-full bg-transparent">
+                        <Download className="h-4 w-4 mr-2" />
+                        Descargar HTML
+                      </Button>
+                    </>
                   )}
                 </div>
               </CardContent>
@@ -114,16 +133,13 @@ export default function ManualTestPage() {
             {pdfData && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Vista Previa del PDF</CardTitle>
+                  <CardTitle>Vista Previa del Reporte</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <iframe
-                    src={`data:application/pdf;base64,${pdfData}`}
-                    width="100%"
-                    height="400px"
-                    style={{ border: "1px solid #ccc" }}
-                    title="PDF Preview"
-                  />
+                  <div className="border rounded-lg p-4 bg-gray-50">
+                    <p className="text-sm text-gray-600 mb-2">Reporte HTML generado correctamente</p>
+                    <p className="text-xs text-gray-500">Tamaño: {Math.round(pdfData.length / 1024)} KB</p>
+                  </div>
                 </CardContent>
               </Card>
             )}
