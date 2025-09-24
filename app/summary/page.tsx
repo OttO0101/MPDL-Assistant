@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Download, Mail, Archive } from "lucide-react"
+import { ArrowLeft, Download, Mail, Archive, FileText } from "lucide-react"
 import { AppLogo } from "@/components/core/AppLogo"
 import { generateCleaningInventoryPdf } from "@/actions/generate-pdf"
-import { archivePdf } from "@/actions/archive-pdf"
+import { archivePdf, generateArchiveFilename } from "@/actions/archive-pdf"
 import { resetAllInventories } from "@/actions/reset-inventory"
 import { sendEmailWithPdf } from "@/actions/send-email"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -47,24 +47,41 @@ export default function SummaryPage() {
   const handleDownload = () => {
     if (!pdfData) return
 
-    const blob = new Blob([Buffer.from(pdfData, "base64")], { type: "application/pdf" })
+    const textContent = Buffer.from(pdfData, "base64").toString("utf-8")
+    const blob = new Blob([textContent], { type: "text/plain" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = "resumen-inventario-limpieza.pdf"
+    a.download = "inventario-limpieza-mpdl.txt"
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }
 
+  const handleView = () => {
+    if (!pdfData) return
+
+    const textContent = Buffer.from(pdfData, "base64").toString("utf-8")
+    const newWindow = window.open()
+    if (newWindow) {
+      newWindow.document.write(
+        `<pre style="font-family: monospace; white-space: pre-wrap; padding: 20px;">${textContent}</pre>`,
+      )
+      newWindow.document.close()
+    }
+  }
+
   const handlePrint = () => {
     if (!pdfData) return
 
-    const blob = new Blob([Buffer.from(pdfData, "base64")], { type: "application/pdf" })
-    const url = URL.createObjectURL(blob)
-    const printWindow = window.open(url)
+    const textContent = Buffer.from(pdfData, "base64").toString("utf-8")
+    const printWindow = window.open()
     if (printWindow) {
+      printWindow.document.write(
+        `<pre style="font-family: monospace; white-space: pre-wrap; padding: 20px;">${textContent}</pre>`,
+      )
+      printWindow.document.close()
       printWindow.onload = () => {
         printWindow.print()
       }
@@ -94,24 +111,21 @@ export default function SummaryPage() {
     setArchiveStatus(null)
 
     try {
-      // Generate filename with current month/year
-      const now = new Date()
-      const month = String(now.getMonth() + 1).padStart(2, "0")
-      const year = now.getFullYear()
-      const filename = `Limpieza ${month}/${year}.pdf`
+      // Generate filename with current date
+      const filename = await generateArchiveFilename()
 
       // Archive the PDF
       const archiveResult = await archivePdf(filename)
 
       if (archiveResult.success) {
-        // Reset all inventories after successful archiving
+        // Reset all inventories after successful archiving (poner contadores a cero)
         const resetResult = await resetAllInventories()
 
         if (resetResult.success) {
           setArchiveStatus({
             type: "success",
             message:
-              "PDF archivado correctamente y todos los inventarios han sido limpiados. Redirigiendo al inicio...",
+              "PDF archivado correctamente y todos los contadores han sido puestos a cero. Redirigiendo al inicio...",
           })
 
           // Redirect to home after 3 seconds
@@ -121,7 +135,7 @@ export default function SummaryPage() {
         } else {
           setArchiveStatus({
             type: "error",
-            message: `PDF archivado, pero error al limpiar inventarios: ${resetResult.error}`,
+            message: `PDF archivado, pero error al resetear contadores: ${resetResult.error}`,
           })
         }
       } else {
@@ -209,21 +223,19 @@ export default function SummaryPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* PDF Viewer */}
+          {/* PDF Preview */}
           <div className="lg:col-span-2">
             <Card>
               <CardHeader>
-                <CardTitle>Vista Previa del PDF</CardTitle>
+                <CardTitle>Vista Previa del Listado PDF</CardTitle>
               </CardHeader>
               <CardContent>
                 {pdfData && (
-                  <iframe
-                    src={`data:application/pdf;base64,${pdfData}`}
-                    width="100%"
-                    height="600px"
-                    style={{ border: "none" }}
-                    title="PDF Preview"
-                  />
+                  <div className="bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
+                    <pre className="text-sm font-mono whitespace-pre-wrap">
+                      {Buffer.from(pdfData, "base64").toString("utf-8")}
+                    </pre>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -236,7 +248,17 @@ export default function SummaryPage() {
                 <CardTitle>Acciones</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Button onClick={handleDownload} className="w-full" disabled={!pdfData || isArchiving}>
+                <Button onClick={handleView} className="w-full" disabled={!pdfData || isArchiving}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Ver PDF Completo
+                </Button>
+
+                <Button
+                  onClick={handleDownload}
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  disabled={!pdfData || isArchiving}
+                >
                   <Download className="h-4 w-4 mr-2" />
                   Descargar PDF
                 </Button>
@@ -268,7 +290,7 @@ export default function SummaryPage() {
                   disabled={!pdfData || isArchiving}
                 >
                   <Archive className="h-4 w-4 mr-2" />
-                  {isArchiving ? "Archivando..." : "Archivar y Limpiar"}
+                  {isArchiving ? "Archivando..." : "Archivar y Resetear"}
                 </Button>
               </CardContent>
             </Card>
@@ -279,11 +301,12 @@ export default function SummaryPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-gray-600">
-                  Este resumen contiene todos los inventarios de productos de limpieza registrados en el sistema.
+                  Este PDF contiene un listado completo de todos los inventarios de productos de limpieza, incluyendo el
+                  LAC consolidado.
                 </p>
                 <p className="text-sm text-gray-600 mt-2">
-                  Al hacer clic en "Archivar y Limpiar", el PDF se guardará y todos los registros se eliminarán para
-                  empezar de nuevo.
+                  Al hacer clic en "Archivar y Resetear", el PDF se guardará y todos los contadores de productos se
+                  pondrán a cero para empezar un nuevo período.
                 </p>
               </CardContent>
             </Card>
