@@ -1,80 +1,76 @@
 "use server"
 
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
+import { CLEANING_PRODUCTS_LIST } from "@/lib/constants"
 
-export async function resetAllInventories(): Promise<{ success: boolean; error?: string }> {
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+
+export async function resetAllInventories(): Promise<{
+  success: boolean
+  message: string
+  error?: string
+}> {
   try {
-    console.log("🔄 Iniciando limpieza de inventarios...")
+    console.log("🔄 Iniciando reseteo de todos los inventarios...")
 
-    // Obtener todos los inventarios actuales
-    const { data: inventories, error: fetchError } = await supabase.from("cleaning_inventories").select("*")
+    // Obtener todos los dispositivos únicos
+    const { data: inventories, error: fetchError } = await supabase
+      .from("cleaning_inventories")
+      .select("device")
+      .order("device", { ascending: true })
 
     if (fetchError) {
-      console.error("Error fetching inventories:", fetchError)
-      return { success: false, error: `Error al obtener inventarios: ${fetchError.message}` }
+      console.error("❌ Error al obtener inventarios:", fetchError)
+      return {
+        success: false,
+        message: "Error al obtener inventarios",
+        error: fetchError.message,
+      }
     }
 
-    if (!inventories || inventories.length === 0) {
-      console.log("No hay inventarios para limpiar")
-      return { success: true }
-    }
+    // Obtener dispositivos únicos
+    const uniqueDevices = [...new Set(inventories?.map((inv) => inv.device) || [])]
+    console.log(`📱 Dispositivos encontrados: ${uniqueDevices.length}`, uniqueDevices)
 
-    console.log(`📊 Inventarios encontrados: ${inventories.length}`)
+    // Crear productos con cantidad 0 para cada dispositivo
+    const resetProducts = CLEANING_PRODUCTS_LIST.map((product) => ({
+      productId: product.id,
+      quantity: "0",
+    }))
 
-    // Agrupar por dispositivo y obtener el más reciente de cada uno
-    const latestByDevice = new Map()
-    inventories.forEach((inventory) => {
-      const device = inventory.device
-      if (
-        !latestByDevice.has(device) ||
-        new Date(inventory.updated_at) > new Date(latestByDevice.get(device).updated_at)
-      ) {
-        latestByDevice.set(device, inventory)
-      }
-    })
+    // Insertar nuevos registros con todos los productos en 0 para cada dispositivo
+    const resetPromises = uniqueDevices.map((device) =>
+      supabase.from("cleaning_inventories").insert({
+        device: device,
+        products: resetProducts,
+        created_at: new Date().toISOString(),
+      }),
+    )
 
-    console.log(`🔧 Dispositivos únicos: ${latestByDevice.size}`)
-
-    // Para cada dispositivo, crear un nuevo registro con todos los productos en 0
-    const resetPromises = Array.from(latestByDevice.values()).map(async (inventory) => {
-      if (!inventory.products || typeof inventory.products !== "object") {
-        return null
-      }
-
-      // Crear objeto con todos los productos en 0
-      const resetProducts: Record<string, number> = {}
-      Object.keys(inventory.products).forEach((productName) => {
-        resetProducts[productName] = 0
-      })
-
-      // Insertar nuevo registro con productos en 0
-      const { error: insertError } = await supabase.from("cleaning_inventories").insert([
-        {
-          device: inventory.device,
-          products: resetProducts,
-          reported_by: "Sistema - Reset Automático",
-          date: new Date().toISOString().split("T")[0],
-        },
-      ])
-
-      if (insertError) {
-        console.error(`Error resetting device ${inventory.device}:`, insertError)
-        throw insertError
-      }
-
-      console.log(`✅ Dispositivo ${inventory.device} limpiado`)
-      return inventory.device
-    })
-
-    // Ejecutar todas las operaciones de reset
     const results = await Promise.all(resetPromises)
-    const successfulResets = results.filter((result) => result !== null)
 
-    console.log(`✅ Limpieza completada. ${successfulResets.length} dispositivos procesados`)
+    // Verificar si hubo errores
+    const errors = results.filter((result) => result.error)
+    if (errors.length > 0) {
+      console.error("❌ Errores al resetear inventarios:", errors)
+      return {
+        success: false,
+        message: "Error al resetear algunos inventarios",
+        error: errors[0].error?.message,
+      }
+    }
 
-    return { success: true }
-  } catch (error: any) {
-    console.error("Unexpected error resetting inventories:", error)
-    return { success: false, error: "Ocurrió un error inesperado al limpiar los inventarios." }
+    console.log(`✅ ${uniqueDevices.length} inventarios reseteados exitosamente`)
+    return {
+      success: true,
+      message: `${uniqueDevices.length} inventarios reseteados a cero exitosamente`,
+    }
+  } catch (error) {
+    console.error("❌ Error en resetAllInventories:", error)
+    return {
+      success: false,
+      message: "Error inesperado al resetear inventarios",
+      error: error instanceof Error ? error.message : "Error desconocido",
+    }
   }
 }

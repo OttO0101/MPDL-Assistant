@@ -1,8 +1,14 @@
 "use server"
 
 import { createClient } from "@supabase/supabase-js"
+import { CLEANING_PRODUCTS_LIST } from "@/lib/constants"
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+
+interface ProductQuantity {
+  productId: string
+  quantity: string
+}
 
 export async function generateCleaningInventoryPdf(): Promise<{
   success: boolean
@@ -17,7 +23,7 @@ export async function generateCleaningInventoryPdf(): Promise<{
       .from("cleaning_inventories")
       .select("*")
       .order("device", { ascending: true })
-      .order("updated_at", { ascending: false })
+      .order("created_at", { ascending: false })
 
     if (error) {
       console.error("❌ Error al obtener inventarios:", error)
@@ -28,6 +34,7 @@ export async function generateCleaningInventoryPdf(): Promise<{
     }
 
     console.log(`📊 Inventarios obtenidos: ${inventories?.length || 0}`)
+    console.log("Inventarios raw:", JSON.stringify(inventories, null, 2))
 
     // Agrupar inventarios por dispositivo (tomar el más reciente de cada dispositivo)
     const latestInventories = new Map()
@@ -60,6 +67,11 @@ export async function generateCleaningInventoryPdf(): Promise<{
   }
 }
 
+function getProductNameById(productId: string): string {
+  const product = CLEANING_PRODUCTS_LIST.find((p) => p.id === productId)
+  return product ? product.name : productId
+}
+
 function calculateLacConsolidated(inventories: any[]) {
   console.log("🧮 Calculando LAC Consolidado...")
 
@@ -73,22 +85,34 @@ function calculateLacConsolidated(inventories: any[]) {
 
   const consolidated: any = {
     device: "LAC (Consolidado)",
-    products: {},
+    products: [],
     updated_at: new Date().toISOString(),
   }
 
+  // Objeto para acumular las cantidades por producto
+  const productSums: Record<string, number> = {}
+
   // Sumar las cantidades de todos los dispositivos LAC
   lacDevices.forEach((device) => {
-    if (device.products && typeof device.products === "object") {
-      Object.entries(device.products).forEach(([productName, quantity]) => {
-        if (typeof quantity === "number" && quantity > 0) {
-          consolidated.products[productName] = (consolidated.products[productName] || 0) + quantity
+    console.log(`Procesando LAC device: ${device.device}`, device.products)
+
+    if (Array.isArray(device.products)) {
+      device.products.forEach((prod: ProductQuantity) => {
+        const quantity = Number.parseInt(prod.quantity, 10)
+        if (!isNaN(quantity) && quantity > 0) {
+          productSums[prod.productId] = (productSums[prod.productId] || 0) + quantity
         }
       })
     }
   })
 
-  console.log(`📊 Productos consolidados: ${Object.keys(consolidated.products).length}`)
+  // Convertir el objeto de sumas a array de ProductQuantity
+  consolidated.products = Object.entries(productSums).map(([productId, quantity]) => ({
+    productId,
+    quantity: quantity.toString(),
+  }))
+
+  console.log(`📊 Productos consolidados:`, consolidated.products)
   return consolidated
 }
 
@@ -113,8 +137,8 @@ Fecha de generación: ${currentDate}
 
   // Agregar inventarios regulares
   inventories.forEach((inventory, index) => {
-    const deviceDate = inventory.updated_at
-      ? new Date(inventory.updated_at).toLocaleDateString("es-ES", {
+    const deviceDate = inventory.created_at
+      ? new Date(inventory.created_at).toLocaleDateString("es-ES", {
           year: "numeric",
           month: "short",
           day: "numeric",
@@ -129,14 +153,13 @@ Fecha de generación: ${currentDate}
    PRODUCTOS:
 `
 
-    if (inventory.products && typeof inventory.products === "object") {
-      const products = Object.entries(inventory.products).filter(
-        ([_, quantity]) => typeof quantity === "number" && quantity > 0,
-      )
+    if (Array.isArray(inventory.products) && inventory.products.length > 0) {
+      const validProducts = inventory.products.filter((p: ProductQuantity) => p.quantity && p.quantity !== "0")
 
-      if (products.length > 0) {
-        products.forEach(([productName, quantity]) => {
-          content += `   - ${productName}: ${quantity} unidades\n`
+      if (validProducts.length > 0) {
+        validProducts.forEach((prod: ProductQuantity) => {
+          const productName = getProductNameById(prod.productId)
+          content += `   - ${productName}: ${prod.quantity}\n`
         })
       } else {
         content += `   - No hay productos registrados con cantidad mayor a 0\n`
@@ -149,7 +172,7 @@ Fecha de generación: ${currentDate}
   })
 
   // Agregar LAC Consolidado si existe
-  if (lacConsolidated && Object.keys(lacConsolidated.products).length > 0) {
+  if (lacConsolidated && Array.isArray(lacConsolidated.products) && lacConsolidated.products.length > 0) {
     content += `================================================================================
 
 LAC CONSOLIDADO
@@ -166,13 +189,12 @@ Consolidado generado: ${new Date(lacConsolidated.updated_at).toLocaleDateString(
 PRODUCTOS CONSOLIDADOS:
 `
 
-    const consolidatedProducts = Object.entries(lacConsolidated.products).filter(
-      ([_, quantity]) => typeof quantity === "number" && quantity > 0,
-    )
+    const validConsolidated = lacConsolidated.products.filter((p: ProductQuantity) => p.quantity && p.quantity !== "0")
 
-    if (consolidatedProducts.length > 0) {
-      consolidatedProducts.forEach(([productName, quantity]) => {
-        content += `- ${productName}: ${quantity} unidades\n`
+    if (validConsolidated.length > 0) {
+      validConsolidated.forEach((prod: ProductQuantity) => {
+        const productName = getProductNameById(prod.productId)
+        content += `- ${productName}: ${prod.quantity}\n`
       })
     }
 

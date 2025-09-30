@@ -56,18 +56,30 @@ export default function ProductosLimpieza({ onBack, showBackButton = true }: Pro
       .from("cleaning_inventories")
       .select("device, products")
       .in("device", LAC_SUB_UNITS_FOR_SUM)
+      .order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error fetching LAC inventories from Supabase:", error)
       setError("Error al cargar datos consolidados de LAC.")
       return []
     }
-    return data as CleaningInventory[]
+
+    // Agrupar por dispositivo y tomar solo el más reciente
+    const latestByDevice = new Map<string, CleaningInventory>()
+    data?.forEach((inv: CleaningInventory) => {
+      if (!latestByDevice.has(inv.device)) {
+        latestByDevice.set(inv.device, inv)
+      }
+    })
+
+    return Array.from(latestByDevice.values())
   }, [])
 
   const calculateLacSummary = useCallback(async () => {
     setError(null)
     const lacInventories = await fetchLacInventoriesFromSupabase()
+
+    console.log("LAC Inventories for consolidation:", lacInventories)
 
     const summedQuantities: Record<string, number> = {}
 
@@ -78,6 +90,8 @@ export default function ProductosLimpieza({ onBack, showBackButton = true }: Pro
     })
 
     lacInventories.forEach((inventory) => {
+      console.log(`Processing ${inventory.device}:`, inventory.products)
+
       if (Array.isArray(inventory.products)) {
         inventory.products.forEach((prodQty) => {
           if (prodQty.productId !== PRODUCT_ID_OTROS) {
@@ -89,8 +103,10 @@ export default function ProductosLimpieza({ onBack, showBackButton = true }: Pro
         })
       }
     })
+
+    console.log("LAC Summary calculated:", summedQuantities)
     setLacSummaryQuantities(summedQuantities)
-  }, [fetchLacInventoriesFromSupabase, CLEANING_PRODUCTS_LIST, PRODUCT_ID_OTROS])
+  }, [fetchLacInventoriesFromSupabase])
 
   useEffect(() => {
     let channel: RealtimeChannel | null = null
@@ -121,12 +137,14 @@ export default function ProductosLimpieza({ onBack, showBackButton = true }: Pro
           setError("Error al cargar el inventario anterior.")
           setProductQuantities({})
         } else if (data) {
+          console.log("Loaded inventory data:", data)
           const initialQuantities: Record<string, string> = {}
           if (Array.isArray(data.products)) {
             data.products.forEach((p: ProductQuantity) => {
               initialQuantities[p.productId] = p.quantity
             })
           }
+          console.log("Initial quantities:", initialQuantities)
           setProductQuantities(initialQuantities)
         } else {
           setProductQuantities({})
@@ -227,11 +245,11 @@ export default function ProductosLimpieza({ onBack, showBackButton = true }: Pro
       const inventory: CleaningInventory = {
         device: selectedDevice,
         products,
-        reported_by: "Usuario MPDL", // Valor predeterminado para MPDL
+        reported_by: "Usuario MPDL",
         date: new Date().toISOString().split("T")[0],
       }
 
-      console.log("Attempting to insert inventory:", inventory)
+      console.log("Attempting to insert inventory:", JSON.stringify(inventory, null, 2))
 
       const { data, error: supabaseError } = await supabase.from("cleaning_inventories").insert([inventory]).select()
 
