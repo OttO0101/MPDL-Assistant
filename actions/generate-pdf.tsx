@@ -127,7 +127,7 @@ function generatePdfContent(inventories: any[], lacConsolidated: any): string {
 
   // Crear contenido del PDF como texto plano estructurado
   let content = `INVENTARIO DE PRODUCTOS DE LIMPIEZA - MPDL
-Movimiento por la Paz - Desarme y Democracia
+Movimiento por la Paz, el Desarme y la Libertad
 
 Fecha de generación: ${currentDate}
 
